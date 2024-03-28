@@ -2,3 +2,4 @@ streamlit==1.32.2
 openai==1.14.3
 reportlab==4.1.0
 streamlit-aggrid==0.3.4.post3
+pyyaml==6.0.1
