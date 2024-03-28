@@ -102,26 +102,27 @@ def create_pdf_report(session_data):
     table_value_chain.setStyle(style_table_frame_default)
 
 
-    # -----------------------------------------Use Cases INFORMATION-------------------------------------
-    heading_use_cases = Paragraph("<b>Use Cases</b>", styles['Heading3'])
+    if len(data["use_cases"])>0:
+        # -----------------------------------------Use Cases INFORMATION-------------------------------------
+        heading_use_cases = Paragraph("<b>Use Cases</b>", styles['Heading3'])
 
-    df_use_cases=pd.DataFrame(data["use_cases"])
-    table_data_use_cases_no_para = [df_use_cases.columns.tolist()] + df_use_cases.values.tolist()
-    table_data_use_cases = []
-    for i, row in enumerate(table_data_use_cases_no_para):
-        new_row = []
-        for j, cell in enumerate(row):
-            # Apply bold_white_style for the first row and the first column
-            if i == 0 or j == 0:
-                new_row.append(Paragraph(str(cell), style_table_captions))
-            else:
-                new_row.append(Paragraph(str(cell), style_table_body))
-        table_data_use_cases.append(new_row)
+        df_use_cases=pd.DataFrame(data["use_cases"])
+        table_data_use_cases_no_para = [df_use_cases.columns.tolist()] + df_use_cases.values.tolist()
+        table_data_use_cases = []
+        for i, row in enumerate(table_data_use_cases_no_para):
+            new_row = []
+            for j, cell in enumerate(row):
+                # Apply bold_white_style for the first row and the first column
+                if i == 0 or j == 0:
+                    new_row.append(Paragraph(str(cell), style_table_captions))
+                else:
+                    new_row.append(Paragraph(str(cell), style_table_body))
+            table_data_use_cases.append(new_row)
 
 
 
-    table_use_cases = Table(table_data_use_cases)
-    table_use_cases.setStyle(style_table_frame_default)
+        table_use_cases = Table(table_data_use_cases)
+        table_use_cases.setStyle(style_table_frame_default)
 
 
     # -----------------------------------------# Assemble the document-------------------------------------
@@ -136,8 +137,9 @@ def create_pdf_report(session_data):
     story.append(heading_value_chain)
     story.append(table_value_chain)
     story.append(Spacer(1, 0.2*inch))
-    story.append(heading_use_cases)
-    story.append(table_use_cases)
+    if len(data["use_cases"]) > 0:
+        story.append(heading_use_cases)
+        story.append(table_use_cases)
 
 
 
