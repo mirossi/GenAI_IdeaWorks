@@ -106,6 +106,13 @@ def create_pdf_report(session_data):
         # -----------------------------------------Use Cases INFORMATION-------------------------------------
         heading_use_cases = Paragraph("<b>Use Cases</b>", styles['Heading3'])
 
+        #add user information
+        use_case=data["use_cases"]
+        for case in use_case:
+            dict_key= case["component"]+"_"+case["name"]
+            case["comment"]=user_data[dict_key]["comment"]
+            case["prio"] = user_data[dict_key]["prio"]
+
         df_use_cases=pd.DataFrame(data["use_cases"])
         table_data_use_cases_no_para = [df_use_cases.columns.tolist()] + df_use_cases.values.tolist()
         table_data_use_cases = []
@@ -154,10 +161,15 @@ def create_pdf_report(session_data):
 # file_name_a4 = "report.pdf"
 #
 # #-----------------------------------------LOAD DATA-----------------------------------------
-# file_name="session.pkl"
-# with open(file_name, 'rb') as file:
+
+#file_name="session.pkl"
+#with open(file_name, 'rb') as file:
 #     session=pickle.load(file)
-#
-#
-#
-# create_pdf_report(session,file_name_a4)
+
+
+
+#pdf_bytes= create_pdf_report(session)
+#with open("report.pdf", "wb") as file:
+#    # Seek to the start of the io.BytesIO object if it's not already at the beginning
+#    file.write(pdf_bytes.getbuffer())
+

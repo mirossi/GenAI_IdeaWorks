@@ -13,11 +13,11 @@ import pickle
 import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder,ColumnsAutoSizeMode
 import report
-
+import copy
 
 # -------INIT VARIABLES----------
 # initial openai messages
-initial_dict_for_all_content_information = {"company_name": "N/A", "company_description": "N/A"}
+initial_dict_for_all_content_information = {"company_name": "N/A", "company_description": "N/A", "value_chain":{}}
 
 
 system_prompt_chat = """
@@ -26,21 +26,48 @@ Collect the information in the following sequence:
 - Start with a greating and how you can help
 - Ask the user the company name.
 - After you ask about a short description what the company is doing.
-- After you should propose a value chain for the given company. This should be appropriate to the industry of the company. 
-  As an example for insurance would be product development, underwriting, marketing & sales, claims, IT , finance.
-  Present this as a list (Name of component and short description). Ask if this value chain is right for the company.
-- For each value chain component suggest use cases where Gen AI could help. Each Use Case should have a name, which vlaue chain component it belongs to and a description.
+- After you should propose a value chain for the given company. This should be appropriate to the industry of the company. Present the value chain components in a table with columns "component name" and "component description" . Ask if this value chain is right for the company.
+- Generate for each value chain component a Gen AI use case in one batch. Present the use case in one table with column "name", "component of value chain", "description"
 - Ask if the user wants more idea.
+- Example for a value chain in insurance is  product development, underwriting, marketing & sales, claims, IT , finance
 
+
+
+"""
+system_prompt_JSON_Delta = """
+From last conversation, please extract and add the new information into the JSON. I you don't any new information, don't change the current state.
+
+The json format is like this:
+{
+  "company_name": "<the name of the company, if not given by the user it's N/A>",
+  "company_description": "<short description what is the company doing, if not given by the user it's N/A>"
+  "value_chain":
+    [
+       {
+        "name": "<name of this component>"
+        "description": "<description of component>"
+        "use_cases": [ 
+            {
+                "name": "<name of the use case>"
+                "description": "<description of the use case>"
+            }, 
+        {},
+        ...
+        ]
+    ]
+}
+
+The current state of the JSON is here:
 
 """
 
 system_prompt_JSON = """
-From our conversation, please extract the most up-to-date information and provide only the information in a JSON format, as below.
-If there is yet no information about value_chain, leave it out. Same for the use cases.
+From our conversation, please extract information and provide it in a JSON format, as below.
+Just provide information that exists in the conversation, don't generate new content. If there is no use cases, leave it empty.
+
 
 {
-  "company_name": "<the name of the company, if not given by the user it's N/A>",
+  "company_name": "<the name of the compane, if not given by the user it's N/A>",
   "company_description": "<short description what is the company doing, if not given by the user it's N/A>"
   "value_chain":
     {
@@ -48,7 +75,7 @@ If there is yet no information about value_chain, leave it out. Same for the use
         "description": "<description of component>"
         "use_cases": {
           "<use_case_name1>": {
-            "Description": "<description of the use case>"
+            "description": "<description of the use case>"
           }, ...
         }
       },
@@ -63,6 +90,9 @@ If there is yet no information about value_chain, leave it out. Same for the use
 }
 
 """
+
+
+
 
 
 # -------INIT SESSION_STATE----------
@@ -218,8 +248,53 @@ if openai_api_key:
                 attempt += 1  # Increment the attempt counter if JSON parsing fails
 
         if not success:
+            st.error("Failed to process response after 2 attempts.")
+
+    def open_ai_generate_JSON_OnlyDelta():
+        # Ask ChatGPT to make a JSON File of the information and update JSON
+        client = st.session_state.open_ai_client
+        # sometimes the json format is not valid, rerun a couple of times
+        max_attempts = 2
+        attempt = 1
+        success = False
+        while attempt < max_attempts and not success:
+            try:
+                tmp_message = st.session_state.messages.copy()
+                tmp_message = tmp_message[-2:]
+                json_data=st.session_state.all_content_information.copy()
+                json_data.pop('use_cases', None)
+                prompt=system_prompt_JSON_Delta+json.dumps(json_data, indent=4)
+                tmp_message.append({"role": "user", "content": prompt})
+                response = client.chat.completions.create(model="gpt-3.5-turbo", messages=tmp_message)
+                st.session_state.open_ai_json_string = json.loads(response.choices[0].message.content)
+
+
+                success = True  # If parsing succeeds, set success to True to exit the loop
+            except json.JSONDecodeError:
+                attempt += 1  # Increment the attempt counter if JSON parsing fails
+
+        if not success:
             st.error("Failed to process response after 3 attempts.")
 
+
+    def map_openAIJSON_to_local_variable_Delta():
+        st.session_state.all_content_information = copy.deepcopy(st.session_state.open_ai_json_string)
+        use_case_user_details = st.session_state.use_cases_user_details
+
+        value_chain_data = st.session_state.all_content_information.get("value_chain", None)
+        if value_chain_data != None and len(value_chain_data) > 0:
+            for curr_comp_el in value_chain_data:
+                current_use_cases = curr_comp_el.get("use_cases", None)
+                curr_comp_name= curr_comp_el.get("name", None)
+                if current_use_cases is not None:
+                    for curr_use_case_elem in current_use_cases:
+                        curr_use_case_name=curr_use_case_elem.get("name")
+                        use_case_details_key = curr_comp_name + "_" + curr_use_case_name
+
+                        if use_case_details_key not in use_case_user_details:
+                            use_case_user_details[use_case_details_key] = {
+                                "comment": "", "prio": "Not Rated"}
+                        curr_use_case_elem["component"]=curr_comp_name
 
 
 
@@ -234,7 +309,7 @@ if openai_api_key:
         data["use_cases"]=[]
 
         value_chain_data = st.session_state.open_ai_json_string.get("value_chain", None)
-        if value_chain_data != None:
+        if value_chain_data != None and len(value_chain_data)>0:
             for i, component_name in enumerate(value_chain_data.keys()):
                 component_info={}
                 component_info["name"]=component_name
@@ -252,7 +327,7 @@ if openai_api_key:
 
                         use_case_info={}
                         use_case_info["name"] = use_case_name
-                        use_case_info["description"] = current_use_cases.get(use_case_name).get("Description", "")
+                        use_case_info["description"] = current_use_cases.get(use_case_name).get("description", "")
                         use_case_info["component"]=component_name
                         data["use_cases"].append(use_case_info)
                         component_info["use_cases"].append(use_case_info)
@@ -266,7 +341,7 @@ if openai_api_key:
     with chatbot_container:
         st.header("💬 Chatbot")
 
-        messages = st.container(height=300)
+        messages = st.container(height=500)
 
         #Initialize chatbot the first thime
         if not st.session_state.initialized_chat:
@@ -287,11 +362,14 @@ if openai_api_key:
             #Get andwer form OpenAI
             open_ai_get_answer()
 
-            #Get Json information form OpenAI
+            #Get Json information form OpenAI an map to the local json
+            # with whole chat messages:
             open_ai_generate_JSON()
-
-            #Store Information in local variable
             map_openAIJSON_to_local_variable()
+
+            #with just the last messages of the chat
+            #open_ai_generate_JSON_OnlyDelta()
+            #map_openAIJSON_to_local_variable_Delta()
 
             ##SCRIPT IS NOT re-run after her, so let's do it manually (important to update ui)
             st.rerun()
@@ -333,8 +411,8 @@ if openai_api_key:
             value_container.write("Value chain not defined yet")
 
     # -------USECASE CONTAINER----------
-    if "use_cases" in st.session_state.all_content_information:
-        use_cases = st.session_state.all_content_information["use_cases"]
+    if  "use_cases" in st.session_state.all_content_information:
+        use_cases = copy.deepcopy(st.session_state.all_content_information["use_cases"])
         use_cases_details=st.session_state.use_cases_user_details
         if len(use_cases)>0:
             with (usecase_container):
@@ -481,6 +559,14 @@ if openai_api_key:
 
         st.write("use_cases_user_details")
         st.write(st.session_state.use_cases_user_details)
+
+        st.write("GenAI Messages")
+        st.write(st.session_state.messages)
+
+        st.write("GenAI JSON")
+        st.write(st.session_state.open_ai_json_string)
+
+
 
         st.write("Error Messages")
         st.write(st.session_state.error_messages)
