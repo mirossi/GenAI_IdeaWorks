@@ -1,5 +1,4 @@
-## ToDOS:
-#Strange behaviour: comment and prio in use_case dict, why?
+## Run with streamlit: streamlit run app.py
 
 
 
